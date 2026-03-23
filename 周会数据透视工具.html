@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>周会数据透视工具</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+      max-width: 1100px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #333;
+    }
+    .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    @media (max-width: 700px) { .input-grid { grid-template-columns: 1fr; } }
+    .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-top: 1.5rem; }
+    @media (max-width: 700px) { .result-grid { grid-template-columns: 1fr; } }
+    h1 { font-size: 1.4rem; margin-bottom: 0.5rem; color: #1F4E79; }
+    .hint { font-size: 0.85rem; color: #666; margin-bottom: 1rem; }
+    .input-area { margin-bottom: 1rem; }
+    .input-area label { display: block; font-weight: 500; margin-bottom: 0.5rem; }
+    textarea {
+      width: 100%;
+      min-height: 160px;
+      padding: 0.75rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-family: "SF Mono", Monaco, Consolas, monospace;
+      font-size: 0.85rem;
+      resize: vertical;
+    }
+    .btn {
+      display: inline-block;
+      padding: 0.6rem 1.4rem;
+      background: #1F4E79;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    .btn:hover { background: #2a6bb0; }
+    .btn-outline {
+      background: #fff;
+      color: #1F4E79;
+      border: 1px solid #1F4E79;
+    }
+    .btn-outline:hover { background: #e8f4fc; }
+    .status { margin: 1rem 0; font-size: 0.9rem; }
+    .status.error { color: #dc3545; }
+    .status.ok { color: #28a745; }
+    .result-section { margin-top: 1.5rem; }
+    .result-section > h3 { font-size: 1.1rem; margin-bottom: 0.75rem; color: #1F4E79; }
+    .result-section h4 { font-size: 0.95rem; margin: 0.75rem 0 0.4rem; color: #1F4E79; display: flex; align-items: center; gap: 0.5rem; }
+    table.result-table th[rowspan] { vertical-align: middle; }
+    .result-table-wrap {
+      overflow-x: auto;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      margin-bottom: 1rem;
+    }
+    table.result-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+    table.result-table th,
+    table.result-table td {
+      border: 1px solid #ddd;
+      padding: 0.4rem 0.6rem;
+      text-align: center;
+      white-space: nowrap;
+    }
+    table.result-table th {
+      background: #1F4E79;
+      color: #fff;
+      font-weight: 500;
+    }
+    table.result-table th:first-child,
+    table.result-table td:first-child { min-width: 80px; }
+    table.result-table tr:nth-child(3) { background: #f0f7ff; }
+    table.result-table td.num { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <h1>周会数据透视工具</h1>
+  <p class="hint">支持格式：① 分商城；② 分品类；③ 原周会合并格式。month 支持任意周期。复制粘贴会丢失颜色，请用「下载 Excel」获取含红白绿条件格式的文件。</p>
+  <div class="input-grid">
+    <div class="input-area">
+      <label for="rawInput1">原始数据 ①</label>
+      <textarea id="rawInput1" placeholder="粘贴分商城/分品类数据…"></textarea>
+    </div>
+    <div class="input-area">
+      <label for="rawInput2">原始数据 ②</label>
+      <textarea id="rawInput2" placeholder="粘贴分商城/分品类数据…"></textarea>
+    </div>
+  </div>
+  <button type="button" class="btn" id="btnGen">生成透视表</button>
+  <button type="button" class="btn btn-outline" id="btnDownloadExcel">下载 Excel（含条件格式）</button>
+  <div class="status" id="status"></div>
+
+  <div class="result-grid">
+    <div class="result-section" id="resultSection1" style="display:none">
+      <h3>结果 ①</h3>
+      <div id="mallSection1" style="display:none">
+        <h4>分商城 <button type="button" class="btn btn-outline btn-copy" data-id="1" data-type="mall">复制</button></h4>
+        <div class="result-table-wrap"><table class="result-table" id="tableMall1"></table></div>
+      </div>
+      <div id="cateSection1" style="display:none">
+        <h4>分品类 <button type="button" class="btn btn-outline btn-copy" data-id="1" data-type="cate">复制</button></h4>
+        <div class="result-table-wrap"><table class="result-table" id="tableCate1"></table></div>
+      </div>
+    </div>
+    <div class="result-section" id="resultSection2" style="display:none">
+      <h3>结果 ②</h3>
+      <div id="mallSection2" style="display:none">
+        <h4>分商城 <button type="button" class="btn btn-outline btn-copy" data-id="2" data-type="mall">复制</button></h4>
+        <div class="result-table-wrap"><table class="result-table" id="tableMall2"></table></div>
+      </div>
+      <div id="cateSection2" style="display:none">
+        <h4>分品类 <button type="button" class="btn btn-outline btn-copy" data-id="2" data-type="cate">复制</button></h4>
+        <div class="result-table-wrap"><table class="result-table" id="tableCate2"></table></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const MALL_MAP = { "25-Mar": "2025年3月", "26-Mar": "2026年3月" };
+
+    function parseMonth(str) {
+      const t = (str || "").toString().trim();
+      let y, m;
+      const match1 = t.match(/^(\d{4})-(\d{1,2})$/);
+      const match2 = t.match(/^(\d{4})年(\d{1,2})月$/);
+      const match3 = t.match(/^(\d{4})\/(\d{1,2})$/);
+      if (match1) { y = +match1[1]; m = +match1[2]; }
+      else if (match2) { y = +match2[1]; m = +match2[2]; }
+      else if (match3) { y = +match3[1]; m = +match3[2]; }
+      else if (MALL_MAP[t]) return parseMonth(MALL_MAP[t]);
+      else return null;
+      if (y && m >= 1 && m <= 12) return { key: y + "年" + m + "月", sort: y * 12 + m };
+      return null;
+    }
+
+    function detectMonthPair(rows, monthColIndex, startRow) {
+      const seen = new Set();
+      for (let i = startRow; i < rows.length; i++) {
+        const p = parseMonth(rows[i][monthColIndex]);
+        if (p) seen.add(p.key);
+      }
+      const sorted = [...seen].map(k => {
+        const p = parseMonth(k);
+        return p ? { key: k, sort: p.sort } : null;
+      }).filter(Boolean).sort((a, b) => b.sort - a.sort);
+      if (sorted.length >= 2) {
+        const curr = sorted[0].key, currSort = sorted[0].sort;
+        const prevSort = currSort - 12;
+        const prev = sorted.find(s => s.sort === prevSort)?.key || sorted[1].key;
+        return { curr, prev };
+      }
+      if (sorted.length === 1) return { curr: sorted[0].key, prev: sorted[0].key };
+      return { curr: "2026年3月", prev: "2025年3月" };
+    }
+
+    function normalizeMonth(s) {
+      const p = parseMonth(s);
+      return p ? p.key : null;
+    }
+    const MALL_ORDER = ["京东", "淘系", "拼多多", "其他", "唯品会", "美团"];
+    const CATE_ORDER = [
+      "食品生鲜", "家用电器", "电脑数码", "日用百货", "服饰鞋包", "运动户外", "个护化妆", "母婴用品",
+      "家居家装", "医疗健康", "本地生活", "旅游出行", "金融服务", "汽车消费", "宠物用品", "配饰腕表",
+      "办公设备", "玩模乐器", "游戏", "文化娱乐", "图书音像", "艺术收藏", "房产置业",
+    ];
+
+    function parseCSV(text) {
+      const lines = text.split(/\r?\n/).filter(r => r.trim());
+      if (!lines.length) return [];
+      const sep = lines[0].includes('\t') ? '\t' : ',';
+      let maxCols = 0;
+      const rows = lines.map(line => {
+        const parts = [];
+        let cur = "", inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+          const c = line[i];
+          if (c === '"') inQuotes = !inQuotes;
+          else if ((c === sep && !inQuotes) || (sep === ',' && c === '\t' && !inQuotes)) {
+            parts.push(cur); cur = "";
+          } else cur += c;
+        }
+        parts.push(cur);
+        maxCols = Math.max(maxCols, parts.length);
+        return parts;
+      });
+      return rows.map(r => { while (r.length < maxCols) r.push(""); return r; });
+    }
+
+    function fmtNum(v) {
+      if (typeof v !== 'number' || isNaN(v)) return '';
+      if (Math.abs(v) >= 1 || v === 0) return v.toLocaleString('zh-CN', { maximumFractionDigits: 0 });
+      return v.toLocaleString('zh-CN');
+    }
+    function fmtPct(v) { return (v * 100).toFixed(1) + '%'; }
+
+    function contribColor(v) {
+      if (typeof v !== 'number' || isNaN(v)) return '';
+      const t = Math.max(-1, Math.min(1, v));
+      if (t < 0) {
+        const k = 1 + t;
+        return 'rgb(255,' + Math.round(255 * k) + ',' + Math.round(255 * k) + ')';
+      }
+      const k = 1 - t;
+      return 'rgb(' + Math.round(255 * k) + ',255,' + Math.round(255 * k) + ')';
+    }
+
+    function contribColorHex(v) {
+      if (typeof v !== 'number' || isNaN(v)) return 'FFFFFF';
+      const t = Math.max(-1, Math.min(1, v));
+      let r, g, b;
+      if (t < 0) {
+        const k = Math.round(255 * (1 + t));
+        r = 255; g = k; b = k;
+      } else {
+        const k = Math.round(255 * (1 - t));
+        r = k; g = 255; b = k;
+      }
+      return ('0' + r.toString(16)).slice(-2) + ('0' + g.toString(16)).slice(-2) + ('0' + b.toString(16)).slice(-2);
+    }
+
+    function buildPivotTable(gmvPivot, cpsPivot, currCol, prevCol, rowOrder, indexName) {
+      const totalGmvPrev = Object.values(gmvPivot).reduce((s, r) => s + (r[prevCol] || 0), 0);
+      const totalCpsPrev = Object.values(cpsPivot).reduce((s, r) => s + (r[prevCol] || 0), 0);
+      const totalGmvCurr = Object.values(gmvPivot).reduce((s, r) => s + (r[currCol] || 0), 0);
+      const totalCpsCurr = Object.values(cpsPivot).reduce((s, r) => s + (r[currCol] || 0), 0);
+      const yoyGmv = totalGmvPrev ? (totalGmvCurr - totalGmvPrev) / totalGmvPrev : 0;
+      const yoyCps = totalCpsPrev ? (totalCpsCurr - totalCpsPrev) / totalCpsPrev : 0;
+
+      const rows = [];
+      const keys = Object.keys(gmvPivot);
+      for (const k of keys) {
+        const g = gmvPivot[k] || {}, c = cpsPivot[k] || {};
+        const gCurr = g[currCol] || 0, gPrev = g[prevCol] || 0;
+        const cCurr = c[currCol] || 0, cPrev = c[prevCol] || 0;
+        rows.push({
+          key: k,
+          gCurr, gPrev,
+          gYoy: gPrev ? (gCurr - gPrev) / gPrev : 0,
+          gContrib: totalGmvPrev ? (gCurr - gPrev) / totalGmvPrev : 0,
+          cCurr, cPrev,
+          cYoy: cPrev ? (cCurr - cPrev) / cPrev : 0,
+          cContrib: totalCpsPrev ? (cCurr - cPrev) / totalCpsPrev : 0,
+        });
+      }
+      if (rowOrder) {
+        const rest = rowOrder.filter(k => keys.includes(k));
+        const extra = keys.filter(k => !rowOrder.includes(k));
+        rows.sort((a, b) => [...rest, ...extra].indexOf(a.key) - [...rest, ...extra].indexOf(b.key));
+      }
+
+      const raw = [];
+      raw.push([indexName, "GMV", "GMV", "GMV", "GMV", "CPS", "CPS", "CPS", "CPS"]);
+      raw.push(["", currCol, prevCol, "同比", "贡献率", currCol, prevCol, "同比", "贡献率"]);
+      raw.push(["整体", totalGmvCurr, totalGmvPrev, yoyGmv, yoyGmv, totalCpsCurr, totalCpsPrev, yoyCps, yoyCps]);
+      for (const r of rows) {
+        raw.push([r.key, r.gCurr, r.gPrev, r.gYoy, r.gContrib, r.cCurr, r.cPrev, r.cYoy, r.cContrib]);
+      }
+      return raw;
+    }
+
+    function processRaw(rows) {
+      if (!rows.length) return null;
+      const colCount = rows[0] ? rows[0].length : 0;
+      const h0 = (rows[0] && rows[0][0] || "").toString().trim().toLowerCase();
+      const h1 = (rows[0] && rows[0][1] || "").toString().trim().toLowerCase();
+      const firstCellLooksLikeMonth = /^(\d{4}-\d{1,2}|\d{4}年\d{1,2}月|\d{4}\/\d{1,2})$/.test((rows[0] && rows[0][0] || "").toString().trim());
+
+      if (colCount >= 4 && (h0.includes("month") || firstCellLooksLikeMonth)) {
+        const startRow = h0.includes("month") ? 1 : 0;
+        const { curr, prev } = detectMonthPair(rows, 0, startRow);
+        const dimName = (r) => (r[1] || "").toString().trim();
+        const isMallFormat = /data_type/.test(h1) ||
+          (startRow < rows.length && MALL_ORDER.includes(dimName(rows[startRow])));
+
+        const agg = {};
+        for (let i = startRow; i < rows.length; i++) {
+          const r = rows[i];
+          const monthNorm = normalizeMonth(r[0]);
+          const dim = dimName(r);
+          if (!dim || !monthNorm) continue;
+          const gmv = parseFloat(r[2]) || 0, cps = parseFloat(r[3]) || 0;
+          if (!agg[dim]) agg[dim] = { [prev]: 0, [curr]: 0, _cps: { [prev]: 0, [curr]: 0 } };
+          if (!agg[dim][monthNorm]) agg[dim][monthNorm] = 0;
+          if (!agg[dim]._cps[monthNorm]) agg[dim]._cps[monthNorm] = 0;
+          agg[dim][monthNorm] += gmv;
+          agg[dim]._cps[monthNorm] += cps;
+        }
+        const gmvPivot = {}, cpsPivot = {};
+        for (const k of Object.keys(agg)) {
+          gmvPivot[k] = agg[k];
+          cpsPivot[k] = agg[k]._cps;
+        }
+        if (isMallFormat) {
+          return { sheetMall: buildPivotTable(gmvPivot, cpsPivot, curr, prev, MALL_ORDER, "商城"), sheetCate: null };
+        } else {
+          return { sheetMall: null, sheetCate: buildPivotTable(gmvPivot, cpsPivot, curr, prev, CATE_ORDER, "品类") };
+        }
+      }
+
+      function collectMonths(colIdx) {
+        const s = new Set();
+        for (let i = 1; i < rows.length; i++) {
+          const m = normalizeMonth(rows[i][colIdx]) || (colIdx === 0 ? MALL_MAP[(rows[i][colIdx] || "").toString().trim()] : null);
+          if (m) s.add(m);
+        }
+        return s;
+      }
+      const allMonths = new Set([...collectMonths(0), ...collectMonths(6)]);
+      const monthRows = [...allMonths].map(m => ({ key: m, ...parseMonth(m) })).filter(p => p.sort);
+      monthRows.sort((a, b) => b.sort - a.sort);
+      const curr = monthRows[0]?.key || "2026年3月";
+      const prev = (monthRows.find(m => m.sort === monthRows[0].sort - 12) || monthRows[1])?.key || "2025年3月";
+
+      const mallData = {}, cateData = {};
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i];
+        const dt = (r[1] || "").toString().trim();
+        const monthCn = normalizeMonth(r[0]) || MALL_MAP[(r[0] || "").toString().trim()];
+        if (dt && monthCn) {
+          const gmv = parseFloat(r[2]) || 0, cps = parseFloat(r[3]) || 0;
+          if (!mallData[dt]) mallData[dt] = { [prev]: 0, [curr]: 0, _cps: { [prev]: 0, [curr]: 0 } };
+          if (!mallData[dt][monthCn]) mallData[dt][monthCn] = 0;
+          if (!mallData[dt]._cps[monthCn]) mallData[dt]._cps[monthCn] = 0;
+          mallData[dt][monthCn] += gmv;
+          mallData[dt]._cps[monthCn] += cps;
+        }
+        const cate = (r[7] || "").toString().trim();
+        const monthCate = normalizeMonth(r[6]);
+        if (cate && monthCate) {
+          const gmv = parseFloat(r[8]) || 0, cps = parseFloat(r[9]) || 0;
+          if (!cateData[cate]) cateData[cate] = { [prev]: 0, [curr]: 0, _cps: { [prev]: 0, [curr]: 0 } };
+          if (!cateData[cate][monthCate]) cateData[cate][monthCate] = 0;
+          if (!cateData[cate]._cps[monthCate]) cateData[cate]._cps[monthCate] = 0;
+          cateData[cate][monthCate] += gmv;
+          cateData[cate]._cps[monthCate] += cps;
+        }
+      }
+      const mallGmv = {}, mallCps = {};
+      for (const k of Object.keys(mallData)) {
+        mallGmv[k] = mallData[k];
+        mallCps[k] = mallData[k]._cps;
+      }
+      const cateGmv = {}, cateCps = {};
+      for (const k of Object.keys(cateData)) {
+        cateGmv[k] = cateData[k];
+        cateCps[k] = cateData[k]._cps;
+      }
+      return {
+        sheetMall: buildPivotTable(mallGmv, mallCps, curr, prev, MALL_ORDER, "商城"),
+        sheetCate: buildPivotTable(cateGmv, cateCps, curr, prev, CATE_ORDER, "品类")
+      };
+    }
+
+    function renderTable(el, data) {
+      if (!data || !data.length) return;
+      const indexName = data[0][0] || '';
+      let html = '<thead><tr>';
+      html += '<th rowspan="2">' + indexName + '</th>';
+      html += '<th colspan="4">GMV</th><th colspan="4">CPS</th>';
+      html += '</tr><tr>';
+      for (let c = 1; c < 9; c++) html += '<th>' + (data[1][c] ?? '') + '</th>';
+      html += '</tr></thead><tbody>';
+      for (let r = 2; r < data.length; r++) {
+        const row = data[r];
+        html += '<tr>';
+        for (let c = 0; c < 9; c++) {
+          let val = row[c];
+          let style = '';
+          if (c > 0 && typeof val === 'number') {
+            if (c === 4 || c === 8) style = 'background:' + contribColor(val) + ';';
+            val = (c === 3 || c === 4 || c === 7 || c === 8) ? fmtPct(val) : fmtNum(val);
+          }
+          html += '<td class="' + (c > 0 ? 'num' : '') + '"' + (style ? ' style="' + style + '"' : '') + '>' + (val ?? '') + '</td>';
+        }
+        html += '</tr>';
+      }
+      html += '</tbody>';
+      el.innerHTML = html;
+    }
+
+    function toTSV(data) {
+      if (!data || !data.length) return '';
+      const lines = [];
+      for (let r = 0; r < data.length; r++) {
+        const row = data[r];
+        const cells = row.map((v, c) => {
+          if (r >= 2 && c > 0 && typeof v === 'number') return (c === 3 || c === 4 || c === 7 || c === 8) ? (v * 100).toFixed(1) + '%' : String(v);
+          return String(v ?? '');
+        });
+        lines.push(cells.join('\t'));
+      }
+      return lines.join('\n');
+    }
+
+    function dataToExcelSheet(data) {
+      if (!data || !data.length) return null;
+      const ws = XLSX.utils.aoa_to_sheet(data);
+      const headerFill = { patternType: "solid", fgColor: { rgb: "1F4E79" } };
+      const headerFont = { bold: true, color: { rgb: "FFFFFF" } };
+      for (let r = 0; r < Math.min(2, data.length); r++) {
+        for (let c = 0; c < 9; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          if (ws[addr]) ws[addr].s = { fill: headerFill, font: headerFont, alignment: { horizontal: "center" } };
+        }
+      }
+      for (let r = 2; r < data.length; r++) {
+        for (let c = 0; c < 9; c++) {
+          const addr = XLSX.utils.encode_cell({ r, c });
+          const cell = ws[addr];
+          if (!cell) continue;
+          cell.s = { alignment: { horizontal: "center" } };
+          if (typeof data[r][c] === 'number') {
+            if (c === 3 || c === 4 || c === 7 || c === 8) {
+              cell.z = "0.0%";
+              cell.s.numFmt = "0.0%";
+            } else {
+              cell.z = "#,##0";
+              cell.s.numFmt = "#,##0";
+            }
+            if (c === 4 || c === 8) cell.s.fill = { patternType: "solid", fgColor: { rgb: contribColorHex(data[r][c]) } };
+          }
+        }
+      }
+      ws['!cols'] = [{ wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 10 }, { wch: 10 }];
+      ws['!merges'] = [
+        { s: { r: 0, c: 0 }, e: { r: 1, c: 0 } },
+        { s: { r: 0, c: 1 }, e: { r: 0, c: 4 } },
+        { s: { r: 0, c: 5 }, e: { r: 0, c: 8 } }
+      ];
+      return ws;
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        const s = document.getElementById("status");
+        s.textContent = "已复制到剪贴板，可粘贴到 Excel";
+        s.className = "status ok";
+        setTimeout(() => { s.textContent = ''; s.className = "status"; }, 2000);
+      }).catch(() => {
+        document.getElementById("status").textContent = "复制失败，请手动选中表格内容复制";
+        document.getElementById("status").className = "status error";
+      });
+    }
+
+    let lastResults = { 1: null, 2: null };
+
+    function showResult(id, res, statusEl) {
+      const section = document.getElementById("resultSection" + id);
+      const mallSec = document.getElementById("mallSection" + id);
+      const cateSec = document.getElementById("cateSection" + id);
+      lastResults[id] = res;
+      if (res.sheetMall && res.sheetMall.length) {
+        mallSec.style.display = 'block';
+        renderTable(document.getElementById("tableMall" + id), res.sheetMall);
+      } else mallSec.style.display = 'none';
+      if (res.sheetCate && res.sheetCate.length) {
+        cateSec.style.display = 'block';
+        renderTable(document.getElementById("tableCate" + id), res.sheetCate);
+      } else cateSec.style.display = 'none';
+      section.style.display = 'block';
+    }
+
+    document.getElementById("btnGen").addEventListener("click", () => {
+      const t1 = document.getElementById("rawInput1").value.trim();
+      const t2 = document.getElementById("rawInput2").value.trim();
+      const status = document.getElementById("status");
+      if (!t1 && !t2) {
+        status.textContent = "请至少在一个输入框粘贴数据";
+        status.className = "status error";
+        return;
+      }
+      let ok = 0;
+      try {
+        if (t1) {
+          const rows = parseCSV(t1);
+          const res = processRaw(rows);
+          if (res && (res.sheetMall || res.sheetCate)) { showResult(1, res, status); ok++; }
+          else document.getElementById("resultSection1").style.display = 'none';
+        } else document.getElementById("resultSection1").style.display = 'none';
+        if (t2) {
+          const rows = parseCSV(t2);
+          const res = processRaw(rows);
+          if (res && (res.sheetMall || res.sheetCate)) { showResult(2, res, status); ok++; }
+          else document.getElementById("resultSection2").style.display = 'none';
+        } else document.getElementById("resultSection2").style.display = 'none';
+        status.textContent = ok ? "生成成功，可点击「复制」或选中表格 Ctrl+C 复制" : "解析失败，请确认数据格式";
+        status.className = ok ? "status ok" : "status error";
+      } catch (e) {
+        status.textContent = "解析错误：" + e.message;
+        status.className = "status error";
+      }
+    });
+
+    document.body.addEventListener("click", (e) => {
+      const btn = e.target.closest(".btn-copy");
+      if (!btn) return;
+      const id = btn.dataset.id, type = btn.dataset.type;
+      const res = lastResults[id];
+      if (!res) return;
+      const data = type === "mall" ? res.sheetMall : res.sheetCate;
+      if (data) copyToClipboard(toTSV(data));
+    });
+
+    document.getElementById("btnDownloadExcel").addEventListener("click", () => {
+      const wb = XLSX.utils.book_new();
+      const suffix = (id) => id === 1 ? "①" : "②";
+      for (const id of [1, 2]) {
+        const res = lastResults[id];
+        if (!res) continue;
+        if (res.sheetMall && res.sheetMall.length) {
+          const ws = dataToExcelSheet(res.sheetMall);
+          if (ws) XLSX.utils.book_append_sheet(wb, ws, "分商城" + suffix(id));
+        }
+        if (res.sheetCate && res.sheetCate.length) {
+          const ws = dataToExcelSheet(res.sheetCate);
+          if (ws) XLSX.utils.book_append_sheet(wb, ws, "分品类" + suffix(id));
+        }
+      }
+      if (wb.SheetNames.length === 0) {
+        document.getElementById("status").textContent = "请先生成透视表再下载";
+        document.getElementById("status").className = "status error";
+        return;
+      }
+      XLSX.writeFile(wb, "周会数据_透视汇总.xlsx");
+      document.getElementById("status").textContent = "已下载 Excel";
+      document.getElementById("status").className = "status ok";
+    });
+  </script>
+</body>
+</html>
