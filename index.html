@@ -89,7 +89,7 @@
 </head>
 <body>
   <h1>周会数据透视工具</h1>
-  <p class="hint">支持格式：① 分商城；② 分品类；③ 原周会合并格式。month 支持任意周期。复制粘贴会丢失颜色，请用「下载 Excel」获取含红白绿条件格式的文件。</p>
+  <p class="hint">支持格式：① 分商城；② 分品类；③ 原周会合并格式。month 支持任意周期。复制粘贴会丢失颜色，请用「下载 Excel」获取含条件格式的文件。贡献率列：<strong>负数为柔和绿色</strong>，<strong>正数为柔和红色</strong>（同号内按幅度渐变）；0 为浅灰。</p>
   <div class="input-grid">
     <div class="input-area">
       <label for="rawInput1">原始数据 ①</label>
@@ -207,29 +207,94 @@
     }
     function fmtPct(v) { return (v * 100).toFixed(1) + '%'; }
 
-    function contribColor(v) {
-      if (typeof v !== 'number' || isNaN(v)) return '';
-      const t = Math.max(-1, Math.min(1, v));
-      if (t < 0) {
-        const k = 1 + t;
-        return 'rgb(255,' + Math.round(255 * k) + ',' + Math.round(255 * k) + ')';
-      }
-      const k = 1 - t;
-      return 'rgb(' + Math.round(255 * k) + ',255,' + Math.round(255 * k) + ')';
+    function rgbToHex(r, g, b) {
+      return ('0' + Math.round(r).toString(16)).slice(-2) +
+        ('0' + Math.round(g).toString(16)).slice(-2) +
+        ('0' + Math.round(b).toString(16)).slice(-2);
     }
 
-    function contribColorHex(v) {
-      if (typeof v !== 'number' || isNaN(v)) return 'FFFFFF';
-      const t = Math.max(-1, Math.min(1, v));
-      let r, g, b;
-      if (t < 0) {
-        const k = Math.round(255 * (1 + t));
-        r = 255; g = k; b = k;
-      } else {
-        const k = Math.round(255 * (1 - t));
-        r = k; g = 255; b = k;
+    /** t∈[0,1]：负数列内由深→浅（越负越深），均为柔和绿 */
+    function softGreenAt(t) {
+      t = Math.max(0, Math.min(1, t));
+      const r0 = 142, g0 = 188, b0 = 156;
+      const r1 = 229, g1 = 243, b1 = 232;
+      const r = r0 + (r1 - r0) * t, g = g0 + (g1 - g0) * t, b = b0 + (b1 - b0) * t;
+      return { r, g, b };
+    }
+
+    /** t∈[0,1]：正数列内由浅→深，均为柔和红 */
+    function softRedAt(t) {
+      t = Math.max(0, Math.min(1, t));
+      const r0 = 250, g0 = 236, b0 = 236;
+      const r1 = 214, g1 = 158, b1 = 158;
+      const r = r0 + (r1 - r0) * t, g = g0 + (g1 - g0) * t, b = b0 + (b1 - b0) * t;
+      return { r, g, b };
+    }
+
+    function isOverallRow(row) {
+      return (row && row[0] != null && String(row[0]).trim() === '整体');
+    }
+
+    /** 负段 / 正段分别取 min、max，用于同号内渐变 */
+    function colNegPosBounds(data, colIdx) {
+      let negMin = Infinity, negMax = -Infinity;
+      let posMin = Infinity, posMax = -Infinity;
+      for (let r = 2; r < data.length; r++) {
+        if (isOverallRow(data[r])) continue;
+        const v = data[r][colIdx];
+        if (typeof v !== 'number' || isNaN(v)) continue;
+        if (v < 0) {
+          if (v < negMin) negMin = v;
+          if (v > negMax) negMax = v;
+        } else if (v > 0) {
+          if (v < posMin) posMin = v;
+          if (v > posMax) posMax = v;
+        }
       }
-      return ('0' + r.toString(16)).slice(-2) + ('0' + g.toString(16)).slice(-2) + ('0' + b.toString(16)).slice(-2);
+      return {
+        hasNeg: negMin !== Infinity,
+        negMin, negMax,
+        hasPos: posMax !== -Infinity,
+        posMin, posMax
+      };
+    }
+
+    function valueToHeatStyle(v, bounds) {
+      if (typeof v !== 'number' || isNaN(v)) return '';
+      if (v === 0) return 'background:#ececec;';
+      if (v < 0) {
+        if (!bounds.hasNeg) return 'background:rgb(229,243,232);';
+        let t;
+        if (bounds.negMax - bounds.negMin < 1e-15) t = 0.5;
+        else t = (v - bounds.negMin) / (bounds.negMax - bounds.negMin);
+        const { r, g, b } = softGreenAt(t);
+        return 'background:rgb(' + Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b) + ');';
+      }
+      if (!bounds.hasPos) return 'background:rgb(250,236,236);';
+      let t;
+      if (bounds.posMax - bounds.posMin < 1e-15) t = 0.5;
+      else t = (v - bounds.posMin) / (bounds.posMax - bounds.posMin);
+      const { r, g, b } = softRedAt(t);
+      return 'background:rgb(' + Math.round(r) + ',' + Math.round(g) + ',' + Math.round(b) + ');';
+    }
+
+    function valueToHeatHex(v, bounds) {
+      if (typeof v !== 'number' || isNaN(v)) return 'FFFFFF';
+      if (v === 0) return 'ECECEC';
+      if (v < 0) {
+        if (!bounds.hasNeg) return 'E5F3E8';
+        let t;
+        if (bounds.negMax - bounds.negMin < 1e-15) t = 0.5;
+        else t = (v - bounds.negMin) / (bounds.negMax - bounds.negMin);
+        const { r, g, b } = softGreenAt(t);
+        return rgbToHex(r, g, b);
+      }
+      if (!bounds.hasPos) return 'FAECEC';
+      let t;
+      if (bounds.posMax - bounds.posMin < 1e-15) t = 0.5;
+      else t = (v - bounds.posMin) / (bounds.posMax - bounds.posMin);
+      const { r, g, b } = softRedAt(t);
+      return rgbToHex(r, g, b);
     }
 
     function buildPivotTable(gmvPivot, cpsPivot, currCol, prevCol, rowOrder, indexName) {
@@ -256,11 +321,15 @@
           cContrib: totalCpsPrev ? (cCurr - cPrev) / totalCpsPrev : 0,
         });
       }
-      if (rowOrder) {
-        const rest = rowOrder.filter(k => keys.includes(k));
-        const extra = keys.filter(k => !rowOrder.includes(k));
-        rows.sort((a, b) => [...rest, ...extra].indexOf(a.key) - [...rest, ...extra].indexOf(b.key));
-      }
+      rows.sort((a, b) => {
+        if (b.gCurr !== a.gCurr) return b.gCurr - a.gCurr;
+        if (rowOrder && rowOrder.length) {
+          const ia = rowOrder.indexOf(a.key), ib = rowOrder.indexOf(b.key);
+          const va = ia === -1 ? 9999 : ia, vb = ib === -1 ? 9999 : ib;
+          if (va !== vb) return va - vb;
+        }
+        return String(a.key).localeCompare(String(b.key), 'zh-CN');
+      });
 
       const raw = [];
       raw.push([indexName, "GMV", "GMV", "GMV", "GMV", "CPS", "CPS", "CPS", "CPS"]);
@@ -367,6 +436,7 @@
 
     function renderTable(el, data) {
       if (!data || !data.length) return;
+      const boundsG = colNegPosBounds(data, 4), boundsC = colNegPosBounds(data, 8);
       const indexName = data[0][0] || '';
       let html = '<thead><tr>';
       html += '<th rowspan="2">' + indexName + '</th>';
@@ -376,12 +446,16 @@
       html += '</tr></thead><tbody>';
       for (let r = 2; r < data.length; r++) {
         const row = data[r];
+        const skipHeat = isOverallRow(row);
         html += '<tr>';
         for (let c = 0; c < 9; c++) {
           let val = row[c];
           let style = '';
           if (c > 0 && typeof val === 'number') {
-            if (c === 4 || c === 8) style = 'background:' + contribColor(val) + ';';
+            if (!skipHeat) {
+              if (c === 4) style = valueToHeatStyle(val, boundsG);
+              else if (c === 8) style = valueToHeatStyle(val, boundsC);
+            }
             val = (c === 3 || c === 4 || c === 7 || c === 8) ? fmtPct(val) : fmtNum(val);
           }
           html += '<td class="' + (c > 0 ? 'num' : '') + '"' + (style ? ' style="' + style + '"' : '') + '>' + (val ?? '') + '</td>';
@@ -417,7 +491,9 @@
           if (ws[addr]) ws[addr].s = { fill: headerFill, font: headerFont, alignment: { horizontal: "center" } };
         }
       }
+      const boundsGmvContrib = colNegPosBounds(data, 4), boundsCpsContrib = colNegPosBounds(data, 8);
       for (let r = 2; r < data.length; r++) {
+        const skipHeat = isOverallRow(data[r]);
         for (let c = 0; c < 9; c++) {
           const addr = XLSX.utils.encode_cell({ r, c });
           const cell = ws[addr];
@@ -431,7 +507,10 @@
               cell.z = "#,##0";
               cell.s.numFmt = "#,##0";
             }
-            if (c === 4 || c === 8) cell.s.fill = { patternType: "solid", fgColor: { rgb: contribColorHex(data[r][c]) } };
+            if (!skipHeat) {
+              if (c === 4) cell.s.fill = { patternType: "solid", fgColor: { rgb: valueToHeatHex(data[r][c], boundsGmvContrib) } };
+              else if (c === 8) cell.s.fill = { patternType: "solid", fgColor: { rgb: valueToHeatHex(data[r][c], boundsCpsContrib) } };
+            }
           }
         }
       }
