@@ -85,11 +85,90 @@
     table.result-table td:first-child { min-width: 80px; }
     table.result-table tr:nth-child(3) { background: #f0f7ff; }
     table.result-table td.num { font-variant-numeric: tabular-nums; }
+
+    /* 周会指标卡（与周会表头图一致：浅蓝表头、灰框、指标双行） */
+    .kpi-card-section {
+      margin-bottom: 2.5rem;
+      padding-bottom: 2rem;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    .kpi-card-section > h2 { font-size: 1.15rem; margin-bottom: 0.5rem; color: #1F4E79; }
+    .kpi-card-section .kpi-hint { font-size: 0.85rem; color: #666; margin-bottom: 0.75rem; }
+    .kpi-input-row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: flex-start; margin-bottom: 1rem; }
+    .kpi-input-row textarea {
+      flex: 1 1 320px;
+      min-height: 200px;
+      min-width: 200px;
+    }
+    .kpi-table-wrap {
+      overflow-x: auto;
+      border: 1px solid #DCDCDC;
+      border-radius: 4px;
+      background: #fff;
+    }
+    table.kpi-report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+      table-layout: fixed;
+    }
+    table.kpi-report-table th,
+    table.kpi-report-table td {
+      border: 1px solid #DCDCDC;
+      padding: 0.55rem 0.75rem;
+      vertical-align: middle;
+    }
+    table.kpi-report-table thead th {
+      background: #E8F0FE;
+      color: #111;
+      font-weight: 600;
+      text-align: center;
+    }
+    table.kpi-report-table .col-cat {
+      width: 7.5rem;
+      text-align: center;
+      font-weight: 500;
+      background: #fafafa;
+    }
+    table.kpi-report-table th.col-ind,
+    table.kpi-report-table td.col-ind {
+      text-align: left;
+    }
+    table.kpi-report-table td.kpi-ind-merged {
+      min-width: 14rem;
+    }
+    table.kpi-report-table .kpi-name { font-weight: 700; color: #111; display: block; line-height: 1.35; }
+    table.kpi-report-table .kpi-desc { font-size: 0.78rem; color: #888; font-weight: 400; display: block; margin-top: 0.15rem; line-height: 1.3; }
+    table.kpi-report-table .col-val,
+    table.kpi-report-table .col-yoy,
+    table.kpi-report-table .col-rate {
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+    }
+    table.kpi-report-table .yoy-down { color: #c62828; }
+    table.kpi-report-table .yoy-up { color: #2e7d32; }
+    table.kpi-report-table .yoy-neutral { color: #555; }
+    table.kpi-report-table .rate-dash { color: #999; }
   </style>
 </head>
 <body>
   <h1>周会数据透视工具</h1>
-  <p class="hint">支持格式：① 分商城；② 分品类；③ 原周会合并格式。month 支持任意周期。复制粘贴会丢失颜色，请用「下载 Excel」获取含条件格式的文件。贡献率列：<strong>负数为柔和绿色</strong>，<strong>正数为柔和红色</strong>（同号内按幅度渐变）；0 为浅灰。</p>
+  <p class="hint">支持格式：① 分商城；② 分品类；③ 原周会合并格式。month 支持任意周期。复制粘贴会丢失颜色，请用「下载 Excel」获取含条件格式的文件；下载文件为<strong>一个 xlsx</strong>，内含<strong>周会指标卡</strong>（若有数据）与透视表多 Sheet。贡献率列：<strong>负数为柔和绿色</strong>，<strong>正数为柔和红色</strong>（同号内按幅度渐变）；0 为浅灰。</p>
+
+  <section class="kpi-card-section" aria-labelledby="kpi-card-title">
+    <h2 id="kpi-card-title">周会指标卡（图片样式）</h2>
+    <p class="kpi-hint">粘贴内容：第一行为表头「指标、指标值、同比、完成率」（各占一行或同一行用 Tab 分隔），之后每条指标连续四行——指标名、数值、同比（可含 ↑↓）、完成率（无数据可写 -）。表格中<strong>「指标」占两列合并</strong>（与导出 Excel 的 B、C 列合并一致）。点击下方按钮生成；与下方透视结果一并使用「下载 Excel」导出到<strong>同一文件</strong>。</p>
+    <div class="kpi-input-row">
+      <textarea id="kpiRawInput" placeholder="按说明粘贴…"></textarea>
+      <div>
+        <button type="button" class="btn" id="btnKpiRender">生成指标表</button>
+        <button type="button" class="btn btn-outline" id="btnKpiCopy">复制为 TSV</button>
+      </div>
+    </div>
+    <div class="kpi-table-wrap">
+      <table class="kpi-report-table" id="kpiReportTable" aria-label="周会指标"></table>
+    </div>
+  </section>
   <div class="input-grid">
     <div class="input-area">
       <label for="rawInput1">原始数据 ①</label>
@@ -596,6 +675,11 @@
 
     document.getElementById("btnDownloadExcel").addEventListener("click", () => {
       const wb = XLSX.utils.book_new();
+      const kpiText = document.getElementById("kpiRawInput").value;
+      const kpiRows = parseKpiPasteTSV(kpiText);
+      const kpiWs = kpiDataToExcelSheet(kpiRows);
+      if (kpiWs) XLSX.utils.book_append_sheet(wb, kpiWs, "周会指标卡");
+
       const suffix = (id) => id === 1 ? "①" : "②";
       for (const id of [1, 2]) {
         const res = lastResults[id];
@@ -610,14 +694,279 @@
         }
       }
       if (wb.SheetNames.length === 0) {
-        document.getElementById("status").textContent = "请先生成透视表再下载";
+        document.getElementById("status").textContent = "请至少解析到指标卡数据或先生成透视表后再下载";
         document.getElementById("status").className = "status error";
         return;
       }
-      XLSX.writeFile(wb, "周会数据_透视汇总.xlsx");
-      document.getElementById("status").textContent = "已下载 Excel";
+      XLSX.writeFile(wb, "周会数据_汇总.xlsx");
+      document.getElementById("status").textContent = "已下载 Excel（指标卡与透视表在同一文件）";
       document.getElementById("status").className = "status ok";
     });
+
+    /** ========== 周会指标卡：解析粘贴 + 图片样式表 ========== */
+    const KPI_DEFAULT_PASTE = [
+      "指标", "指标值", "同比", "完成率",
+      "DAU", "1,242,841", "↓14.05%", "86.01%",
+      "GMV", "659,758,626", "↓34.46%", "60.63%",
+      "CPS", "16,009,447", "↓32.69%", "62.44%",
+      "整合营销", "17,064,560", "↓51.61%", "29.93%",
+      "APP使用时长(分钟)", "258,297,907", "↓22.48%", "-",
+      "社区详情页时长(分钟)", "39,738,498", "↑2.29%", "-"
+    ].join("\n");
+
+    const KPI_DESC_MAP = {
+      "DAU": "日活跃用户数",
+      "GMV": "成交总额",
+      "CPS": "佣金相关收入",
+      "整合营销": "品牌营销等整合收入",
+      "APP使用时长(分钟)": "端内使用时长（分钟）",
+      "社区详情页时长(分钟)": "社区详情页停留（分钟）"
+    };
+    const KPI_INCOME_ORDER = ["CPS", "整合营销"];
+    const KPI_USER_ORDER = ["DAU", "GMV", "APP使用时长(分钟)", "社区详情页时长(分钟)"];
+
+    function kpiCategory(name) {
+      return KPI_INCOME_ORDER.includes(name) ? "收入指标" : "用户指标";
+    }
+
+    function kpiOrderInGroup(name) {
+      let i = KPI_INCOME_ORDER.indexOf(name);
+      if (i >= 0) return i;
+      i = KPI_USER_ORDER.indexOf(name);
+      if (i >= 0) return i;
+      return 999;
+    }
+
+    function parseKpiPaste(text) {
+      const raw = (text || "").split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
+      if (!raw.length) return [];
+      let start = 0;
+      const h0 = raw[0].replace(/\s/g, "");
+      if (h0 === "指标" && raw.length >= 4) {
+        const h1 = raw[1].replace(/\s/g, "");
+        const h2 = raw[2].replace(/\s/g, "");
+        const h3 = raw[3].replace(/\s/g, "");
+        if (h1.includes("指标值") && (h2.includes("同比") || h2 === "同比") && (h3.includes("完成率") || h3 === "完成率"))
+          start = 4;
+      }
+      const rows = [];
+      for (let i = start; i + 3 < raw.length; i += 4) {
+        rows.push({
+          name: raw[i],
+          value: raw[i + 1],
+          yoy: raw[i + 2],
+          rate: raw[i + 3]
+        });
+      }
+      return rows;
+    }
+
+    function parseKpiPasteTSV(text) {
+      const lines = (text || "").split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
+      if (!lines.length) return [];
+      const sep = lines[0].includes("\t") ? "\t" : null;
+      if (!sep) return parseKpiPaste(text);
+      const first = lines[0].split("\t").map(c => c.trim());
+      if (first.length >= 4 && first[0] === "指标" && first[1].includes("指标值")) {
+        const rows = [];
+        for (let L = 1; L < lines.length; L++) {
+          const cells = lines[L].split("\t").map(c => c.trim());
+          if (cells.length >= 4)
+            rows.push({ name: cells[0], value: cells[1], yoy: cells[2], rate: cells[3] });
+        }
+        return rows;
+      }
+      return parseKpiPaste(text);
+    }
+
+    function yoyCellClass(yoy) {
+      const s = (yoy || "").toString();
+      if (s.includes("↓")) return "yoy-down";
+      if (s.includes("↑")) return "yoy-up";
+      return "yoy-neutral";
+    }
+
+    function orderKpiRows(rows) {
+      const income = rows.filter(r => kpiCategory(r.name) === "收入指标")
+        .sort((a, b) => kpiOrderInGroup(a.name) - kpiOrderInGroup(b.name));
+      const user = rows.filter(r => kpiCategory(r.name) === "用户指标")
+        .sort((a, b) => kpiOrderInGroup(a.name) - kpiOrderInGroup(b.name));
+      return [...income, ...user];
+    }
+
+    function buildKpiGrouped(ordered) {
+      const groups = [];
+      let cur = null;
+      for (const r of ordered) {
+        const cat = kpiCategory(r.name);
+        if (!cur || cur.cat !== cat) {
+          cur = { cat, rows: [] };
+          groups.push(cur);
+        }
+        cur.rows.push(r);
+      }
+      return groups;
+    }
+
+    function kpiIndicatorCellText(r) {
+      const desc = KPI_DESC_MAP[r.name] || "";
+      return desc ? (r.name + "\n" + desc) : r.name;
+    }
+
+    /** 周会指标卡 → Excel：A 列分类（分组纵向合并），B:C 列合并为指标（名称+说明换行），D 指标值、E 同比、F 完成率 */
+    function kpiDataToExcelSheet(rows) {
+      const ordered = orderKpiRows(rows);
+      if (!ordered.length) return null;
+      const groups = buildKpiGrouped(ordered);
+      const thin = { style: "thin", color: { rgb: "DCDCDC" } };
+      const borderAll = { top: thin, bottom: thin, left: thin, right: thin };
+      const merges = [{ s: { r: 0, c: 1 }, e: { r: 0, c: 2 } }];
+      const aoa = [["分类", "指标", "", "指标值", "同比", "完成率"]];
+      let excelRow = 1;
+      for (const g of groups) {
+        const startRow = excelRow;
+        const n = g.rows.length;
+        for (let i = 0; i < n; i++) {
+          const row = g.rows[i];
+          const rateStr = (row.rate || "").toString().trim();
+          const rateDisp = (rateStr === "" || rateStr === "-" || rateStr === "—") ? "—" : rateStr;
+          aoa.push([
+            i === 0 ? g.cat : "",
+            kpiIndicatorCellText(row),
+            "",
+            row.value,
+            row.yoy,
+            rateDisp
+          ]);
+          merges.push({ s: { r: excelRow, c: 1 }, e: { r: excelRow, c: 2 } });
+          excelRow++;
+        }
+        if (n > 1) merges.push({ s: { r: startRow, c: 0 }, e: { r: startRow + n - 1, c: 0 } });
+      }
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws["!merges"] = merges;
+      ws["!cols"] = [{ wch: 10 }, { wch: 22 }, { wch: 4 }, { wch: 16 }, { wch: 12 }, { wch: 10 }];
+
+      const headerStyle = {
+        fill: { patternType: "solid", fgColor: { rgb: "E8F0FE" } },
+        font: { bold: true, color: { rgb: "000000" } },
+        alignment: { horizontal: "center", vertical: "center", wrapText: true },
+        border: borderAll
+      };
+      for (let c = 0; c < 6; c++) {
+        const addr = XLSX.utils.encode_cell({ r: 0, c });
+        if (!ws[addr]) ws[addr] = { t: "s", v: String(aoa[0][c] ?? "") };
+        ws[addr].s = Object.assign({}, headerStyle);
+      }
+
+      for (let rr = 1; rr < aoa.length; rr++) {
+        for (let c = 0; c < 6; c++) {
+          const addr = XLSX.utils.encode_cell({ r: rr, c });
+          const cell = ws[addr];
+          if (!cell) continue;
+          if (c === 0) {
+            cell.s = {
+              border: borderAll,
+              fill: { patternType: "solid", fgColor: { rgb: "FAFAFA" } },
+              alignment: { horizontal: "center", vertical: "center", wrapText: true }
+            };
+          } else if (c === 1) {
+            cell.s = {
+              border: borderAll,
+              font: { bold: true, color: { rgb: "000000" } },
+              alignment: { horizontal: "left", vertical: "center", wrapText: true }
+            };
+          } else if (c === 2) {
+            cell.s = { border: borderAll, alignment: { horizontal: "center", vertical: "center" } };
+          } else {
+            const yoyStr = String(aoa[rr][4] ?? "");
+            const yoyRgb = yoyStr.includes("↓") ? "C62828" : yoyStr.includes("↑") ? "2E7D32" : "000000";
+            const font = c === 4 ? { color: { rgb: yoyRgb } } : { color: { rgb: "000000" } };
+            const rateStr = String(aoa[rr][5] ?? "");
+            const rateFont = c === 5 && (rateStr === "—") ? { color: { rgb: "999999" } } : {};
+            cell.s = {
+              border: borderAll,
+              alignment: { horizontal: "center", vertical: "center", wrapText: true },
+              font: Object.assign({}, font, rateFont)
+            };
+          }
+        }
+      }
+      return ws;
+    }
+
+    function renderKpiReportTable(el, rows) {
+      const ordered = orderKpiRows(rows);
+      const groups = buildKpiGrouped(ordered);
+      let html = "<thead><tr>";
+      html += "<th scope=\"col\" class=\"col-cat\">分类</th>";
+      html += "<th scope=\"col\" class=\"col-ind\" colspan=\"2\">指标</th>";
+      html += "<th scope=\"col\" class=\"col-val\">指标值</th>";
+      html += "<th scope=\"col\" class=\"col-yoy\">同比</th>";
+      html += "<th scope=\"col\" class=\"col-rate\">完成率</th>";
+      html += "</tr></thead><tbody>";
+      for (const g of groups) {
+        const rs = g.rows, n = rs.length;
+        for (let i = 0; i < n; i++) {
+          const r = rs[i];
+          const desc = KPI_DESC_MAP[r.name] || "";
+          html += "<tr>";
+          if (i === 0)
+            html += "<td class=\"col-cat\" rowspan=\"" + n + "\">" + escapeHtml(g.cat) + "</td>";
+          html += "<td class=\"col-ind kpi-ind-merged\" colspan=\"2\"><span class=\"kpi-name\">" + escapeHtml(r.name) + "</span>";
+          if (desc) html += "<span class=\"kpi-desc\">" + escapeHtml(desc) + "</span>";
+          html += "</td>";
+          html += "<td class=\"col-val\">" + escapeHtml(r.value) + "</td>";
+          html += "<td class=\"col-yoy " + yoyCellClass(r.yoy) + "\">" + escapeHtml(r.yoy) + "</td>";
+          const rateStr = (r.rate || "").toString().trim();
+          const isDash = rateStr === "" || rateStr === "-" || rateStr === "—";
+          html += "<td class=\"col-rate" + (isDash ? " rate-dash" : "") + "\">" + (isDash ? "—" : escapeHtml(rateStr)) + "</td>";
+          html += "</tr>";
+        }
+      }
+      html += "</tbody>";
+      el.innerHTML = html;
+    }
+
+    function escapeHtml(s) {
+      return String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    let lastKpiRows = [];
+
+    function runKpiRender() {
+      const text = document.getElementById("kpiRawInput").value;
+      const rows = parseKpiPasteTSV(text);
+      lastKpiRows = rows;
+      const el = document.getElementById("kpiReportTable");
+      if (!rows.length) {
+        el.innerHTML = "<tbody><tr><td colspan=\"6\" style=\"text-align:center;color:#888;padding:1rem;\">未解析到数据，请检查粘贴格式（每条指标 4 行）</td></tr></tbody>";
+        return;
+      }
+      renderKpiReportTable(el, rows);
+    }
+
+    document.getElementById("kpiRawInput").value = KPI_DEFAULT_PASTE;
+    document.getElementById("btnKpiRender").addEventListener("click", runKpiRender);
+    document.getElementById("btnKpiCopy").addEventListener("click", () => {
+      const ordered = orderKpiRows(lastKpiRows);
+      if (!ordered.length) {
+        document.getElementById("status").textContent = "请先生成指标表";
+        document.getElementById("status").className = "status error";
+        return;
+      }
+      const lines = ["分类\t指标\t指标值\t同比\t完成率"];
+      for (const r of ordered) {
+        lines.push([kpiCategory(r.name), r.name, r.value, r.yoy, r.rate].join("\t"));
+      }
+      copyToClipboard(lines.join("\n"));
+    });
+
+    runKpiRender();
   </script>
 </body>
 </html>
