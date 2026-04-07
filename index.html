@@ -183,10 +183,10 @@
     <p class="kpi-hint">版式与周会示意图一致：<strong>四列</strong>——左侧「收入指标 / 用户指标」纵向合并、指标名单列（名称加粗 + 灰色斜体说明）、第三列为周期指标值、同比；<strong>不展示完成率</strong>（若粘贴里仍带完成率列会自动忽略）。同比：<strong>下降用「-」</strong>，上升<strong>无箭头</strong>。支持表头为 3 行（指标/指标值/同比）或 4 行（含完成率）。</p>
     <div class="kpi-value-title-row">
       <label for="kpiValueColTitle">第三列表头（指标值列）</label>
-      <input type="text" id="kpiValueColTitle" value="2026年3月指标值" placeholder="如 2026年3月指标值" />
+      <input type="text" id="kpiValueColTitle" value="" placeholder="第三列表头，需自行填写（如 2026年3月指标值）" />
     </div>
     <div class="kpi-input-row">
-      <textarea id="kpiRawInput" placeholder="按说明粘贴…"></textarea>
+      <textarea id="kpiRawInput" placeholder="粘贴指标数据后点击「生成指标表」…"></textarea>
       <div>
         <button type="button" class="btn" id="btnKpiRender">生成指标表</button>
         <button type="button" class="btn btn-outline" id="btnKpiCopy">复制为 TSV</button>
@@ -731,26 +731,17 @@
     });
 
     /** ========== 周会指标卡：解析粘贴 + 图片样式表 ========== */
-    const KPI_DEFAULT_PASTE = [
-      "指标", "指标值", "同比", "完成率",
-      "DAU", "1,242,841", "-14.05%", "86.01%",
-      "GMV", "659,758,626", "-34.46%", "60.63%",
-      "CPS", "16,009,447", "-32.69%", "62.44%",
-      "整合营销", "17,064,560", "-51.61%", "29.93%",
-      "APP使用时长(分钟)", "258,297,907", "-22.48%", "-",
-      "社区详情页时长(分钟)", "39,738,498", "2.29%", "-"
-    ].join("\n");
-
+    /** 指标第二行说明与周会示意图逐字一致（示意图外指标可无说明） */
     const KPI_DESC_MAP = {
       "CPS": "全站接口预估衰减后的有效CPS数据",
-      "整合营销": "品牌营销与整合收入相关口径",
-      "DAU": "日活跃用户数",
-      "GMV": "成交总额",
-      "APP使用时长(分钟)": "APP 端内使用时长（分钟）",
-      "社区详情页时长(分钟)": "社区详情页停留时长（分钟）"
+      "整合营销": "全站整合营销发布额数据",
+      "DAU": "DAU之和除以统计天数",
+      "GMV": "全站接口预估衰减后的有效GMV数据",
+      "社区时长（分钟）": "社区详情页（包含原创和转载）时长",
+      "社区详情页时长(分钟)": "社区详情页（包含原创和转载）时长"
     };
     const KPI_INCOME_ORDER = ["CPS", "整合营销"];
-    const KPI_USER_ORDER = ["DAU", "GMV", "APP使用时长(分钟)", "社区详情页时长(分钟)"];
+    const KPI_USER_ORDER = ["DAU", "GMV", "APP使用时长(分钟)", "社区时长（分钟）", "社区详情页时长(分钟)"];
 
     function kpiCategory(name) {
       return KPI_INCOME_ORDER.includes(name) ? "收入指标" : "用户指标";
@@ -863,8 +854,7 @@
 
     function getKpiValueColTitle() {
       const el = document.getElementById("kpiValueColTitle");
-      const t = (el && el.value) ? el.value.trim() : "";
-      return t || "2026年3月指标值";
+      return (el && el.value) ? el.value.trim() : "";
     }
 
     function kpiIndicatorCellText(r) {
@@ -996,13 +986,12 @@
       lastKpiRows = rows;
       const el = document.getElementById("kpiReportTable");
       if (!rows.length) {
-        el.innerHTML = "<tbody><tr><td colspan=\"4\" style=\"text-align:center;color:#888;padding:1rem;\">未解析到数据，请检查粘贴格式（每条指标 3 行或 4 行）</td></tr></tbody>";
+        el.innerHTML = "<tbody><tr><td colspan=\"4\" style=\"text-align:center;color:#888;padding:1rem;\">请粘贴数据后点击「生成指标表」；每条指标为 3 行（或含完成率时为 4 行）</td></tr></tbody>";
         return;
       }
       renderKpiReportTable(el, rows);
     }
 
-    document.getElementById("kpiRawInput").value = KPI_DEFAULT_PASTE;
     document.getElementById("btnKpiRender").addEventListener("click", runKpiRender);
     document.getElementById("kpiValueColTitle").addEventListener("input", () => {
       if (lastKpiRows.length) renderKpiReportTable(document.getElementById("kpiReportTable"), lastKpiRows);
